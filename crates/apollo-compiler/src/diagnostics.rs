@@ -486,3 +486,46 @@ impl ApolloDiagnostic {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::{hir::TypeSystem, ApolloCompiler, HirDatabase};
+
+    #[test]
+    fn reproduce_683() {
+        let schema_type_system = schema_type_system();
+
+        let mut compiler = ApolloCompiler::new();
+        compiler.set_type_system_hir(schema_type_system);
+        let query = r#"{ product { description } }"#;
+        let _ = compiler.add_executable(query, "query.graphql");
+        let errors = compiler.validate();
+        assert!(!errors.is_empty(), "{:#?}", errors);
+        for error in errors {
+            // here failing with:
+            // thread 'diagnostics::tests::reproduce_683' panicked at crates/apollo-compiler/src/diagnostics.rs:443:48:
+            // called `Option::unwrap()` on a `None` value
+            format!("{error}");
+        }
+    }
+
+    fn schema_type_system() -> Arc<TypeSystem> {
+        let sdl = r#"
+          schema {
+            query: Query
+            mutation: Mutation
+          }
+          type Product {
+            name: String
+          }
+          type Query {
+            product: Product
+          }
+          "#;
+        let mut compiler = ApolloCompiler::new();
+        compiler.add_type_system(sdl, "schema");
+        compiler.db.type_system()
+    }
+}
